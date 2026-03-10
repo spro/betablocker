@@ -27,7 +27,7 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-chrome.contextMenus.onClicked.addListener((info) => {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId !== "block-domain" || !info.pageUrl) return;
     let hostname: string;
     try {
@@ -36,13 +36,21 @@ chrome.contextMenus.onClicked.addListener((info) => {
         return;
     }
     chrome.storage.local.get(
-        { blockedDomains: DEFAULT_BLOCKED_DOMAINS },
+        { blockedDomains: DEFAULT_BLOCKED_DOMAINS, schedule: DEFAULT_SCHEDULE },
         (data) => {
             const domains = data.blockedDomains as string[];
+            const schedule = data.schedule as Schedule;
             if (!domains.includes(hostname)) {
                 chrome.storage.local.set({
                     blockedDomains: [...domains, hostname],
                 });
+            }
+            if (tab?.id != null && isWithinSchedule(schedule)) {
+                const blockedUrl =
+                    chrome.runtime.getURL("blocked.html") +
+                    "?url=" +
+                    encodeURIComponent(info.pageUrl!);
+                chrome.tabs.update(tab.id, { url: blockedUrl });
             }
         },
     );

@@ -7,3 +7,7 @@ Chrome extension that blocks distracting sites on a schedule.
 ```
 npm run prepare  # format → lint → build
 ```
+
+## Commits
+
+Single-line messages, no attribution.
