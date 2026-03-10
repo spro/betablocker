@@ -1,29 +1,24 @@
 import { useEffect, useRef, useState } from "react";
+import {
+    isWithinSchedule,
+    type Schedule,
+    type TimeRange,
+} from "../lib/schedule";
 
-interface Schedule {
-    start: string;
-    end: string;
-}
-
-const DEFAULT_SCHEDULE: Schedule = { start: "10:00", end: "18:00" };
-
-function isWithinSchedule(schedule: Schedule): boolean {
-    const now = new Date();
-    const current = now.getHours() * 60 + now.getMinutes();
-    const [startH, startM] = schedule.start.split(":").map(Number);
-    const [endH, endM] = schedule.end.split(":").map(Number);
-    const start = startH * 60 + startM;
-    const end = endH * 60 + endM;
-    return start <= end
-        ? current >= start && current < end
-        : current >= start || current < end;
-}
+const DEFAULT_SCHEDULE: Schedule = [{ start: "10:00", end: "18:00" }];
 
 function fmt12(hhmm: string): string {
     const [h, m] = hhmm.split(":").map(Number);
     const suffix = h >= 12 ? "pm" : "am";
     const hour = h % 12 || 12;
     return `${hour}:${String(m).padStart(2, "0")}${suffix}`;
+}
+
+// Migrate old single-range format to array
+function normalizeSchedule(raw: unknown): Schedule {
+    if (Array.isArray(raw)) return raw as Schedule;
+    if (raw && typeof raw === "object") return [raw as TimeRange];
+    return DEFAULT_SCHEDULE;
 }
 
 export default function Popup() {
@@ -38,7 +33,7 @@ export default function Popup() {
             { blockedDomains: [], schedule: DEFAULT_SCHEDULE },
             (data) => {
                 setDomains(data.blockedDomains as string[]);
-                setSchedule(data.schedule as Schedule);
+                setSchedule(normalizeSchedule(data.schedule));
             },
         );
     }, []);
@@ -78,6 +73,21 @@ export default function Popup() {
         chrome.storage.local.set({ schedule: next });
     }
 
+    function updateRange(index: number, field: "start" | "end", value: string) {
+        const next = schedule.map((r, i) =>
+            i === index ? { ...r, [field]: value } : r,
+        );
+        saveSchedule(next);
+    }
+
+    function addRange() {
+        saveSchedule([...schedule, { start: "09:00", end: "17:00" }]);
+    }
+
+    function removeRange(index: number) {
+        saveSchedule(schedule.filter((_, i) => i !== index));
+    }
+
     const active = isWithinSchedule(schedule);
 
     return (
@@ -98,31 +108,57 @@ export default function Popup() {
 
             {/* Schedule */}
             <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">
-                    Block Hours
-                </p>
-                <div className="flex items-center gap-2">
-                    <input
-                        type="time"
-                        value={schedule.start}
-                        onChange={(e) =>
-                            saveSchedule({ ...schedule, start: e.target.value })
-                        }
-                        className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
-                    />
-                    <span className="text-gray-400 text-sm">to</span>
-                    <input
-                        type="time"
-                        value={schedule.end}
-                        onChange={(e) =>
-                            saveSchedule({ ...schedule, end: e.target.value })
-                        }
-                        className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
-                    />
+                <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+                        Block Hours
+                    </p>
+                    <button
+                        onClick={addRange}
+                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        title="Add time range"
+                    >
+                        + Add range
+                    </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1.5">
-                    {fmt12(schedule.start)} – {fmt12(schedule.end)}
-                </p>
+                <div className="space-y-2">
+                    {schedule.map((range, i) => (
+                        <div key={i}>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="time"
+                                    value={range.start}
+                                    onChange={(e) =>
+                                        updateRange(i, "start", e.target.value)
+                                    }
+                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
+                                />
+                                <span className="text-gray-400 text-sm">
+                                    to
+                                </span>
+                                <input
+                                    type="time"
+                                    value={range.end}
+                                    onChange={(e) =>
+                                        updateRange(i, "end", e.target.value)
+                                    }
+                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
+                                />
+                                {schedule.length > 1 && (
+                                    <button
+                                        onClick={() => removeRange(i)}
+                                        className="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none"
+                                        title="Remove range"
+                                    >
+                                        ×
+                                    </button>
+                                )}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {fmt12(range.start)} – {fmt12(range.end)}
+                            </p>
+                        </div>
+                    ))}
+                </div>
             </div>
 
             {/* Domains */}

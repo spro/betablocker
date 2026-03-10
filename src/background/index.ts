@@ -1,11 +1,18 @@
 import type { Attempt } from "../types";
+import {
+    isWithinSchedule,
+    type Schedule,
+    type TimeRange,
+} from "../lib/schedule";
 
 const DEFAULT_BLOCKED_DOMAINS = ["x.com", "twitter.com"];
-const DEFAULT_SCHEDULE = { start: "10:00", end: "18:00" };
+const DEFAULT_SCHEDULE: Schedule = [{ start: "10:00", end: "18:00" }];
 
-interface Schedule {
-    start: string; // "HH:MM"
-    end: string; // "HH:MM"
+// Migrate old single-range format to array
+function normalizeSchedule(raw: unknown): Schedule {
+    if (Array.isArray(raw)) return raw as Schedule;
+    if (raw && typeof raw === "object") return [raw as TimeRange];
+    return DEFAULT_SCHEDULE;
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -39,7 +46,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
         { blockedDomains: DEFAULT_BLOCKED_DOMAINS, schedule: DEFAULT_SCHEDULE },
         (data) => {
             const domains = data.blockedDomains as string[];
-            const schedule = data.schedule as Schedule;
+            const schedule = normalizeSchedule(data.schedule);
             if (!domains.includes(hostname)) {
                 chrome.storage.local.set({
                     blockedDomains: [...domains, hostname],
@@ -70,21 +77,6 @@ function matchedDomain(url: string, blockedDomains: string[]): string | null {
     return null;
 }
 
-function isWithinSchedule(schedule: Schedule): boolean {
-    const now = new Date();
-    const current = now.getHours() * 60 + now.getMinutes();
-
-    const [startH, startM] = schedule.start.split(":").map(Number);
-    const [endH, endM] = schedule.end.split(":").map(Number);
-    const start = startH * 60 + startM;
-    const end = endH * 60 + endM;
-
-    // handles overnight ranges (e.g. 22:00–06:00) too
-    return start <= end
-        ? current >= start && current < end
-        : current >= start || current < end;
-}
-
 chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     if (details.frameId !== 0) return;
     if (!details.url.startsWith("http")) return;
@@ -92,7 +84,7 @@ chrome.webNavigation.onBeforeNavigate.addListener((details) => {
     chrome.storage.local.get(
         { blockedDomains: DEFAULT_BLOCKED_DOMAINS, schedule: DEFAULT_SCHEDULE },
         (data) => {
-            const schedule = data.schedule as Schedule;
+            const schedule = normalizeSchedule(data.schedule);
             if (!isWithinSchedule(schedule)) return;
 
             const blockedDomains = data.blockedDomains as string[];
