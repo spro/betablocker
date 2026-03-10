@@ -6,6 +6,8 @@ export interface TimeRange {
 export type Schedule = TimeRange[];
 
 function withinRange(range: TimeRange): boolean {
+    if (!range?.start || !range?.end) return false;
+
     const now = new Date();
     const current = now.getHours() * 60 + now.getMinutes();
 

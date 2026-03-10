@@ -26,6 +26,8 @@ export default function Popup() {
     const [input, setInput] = useState("");
     const [error, setError] = useState("");
     const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE);
+    const [savedIndex, setSavedIndex] = useState<number | null>(null);
+    const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -68,6 +70,12 @@ export default function Popup() {
         inputRef.current?.focus();
     }
 
+    function flashSaved(index: number) {
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        setSavedIndex(index);
+        savedTimerRef.current = setTimeout(() => setSavedIndex(null), 1500);
+    }
+
     function saveSchedule(next: Schedule) {
         setSchedule(next);
         chrome.storage.local.set({ schedule: next });
@@ -78,10 +86,13 @@ export default function Popup() {
             i === index ? { ...r, [field]: value } : r,
         );
         saveSchedule(next);
+        flashSaved(index);
     }
 
     function addRange() {
-        saveSchedule([...schedule, { start: "09:00", end: "17:00" }]);
+        const next = [...schedule, { start: "09:00", end: "17:00" }];
+        saveSchedule(next);
+        flashSaved(next.length - 1);
     }
 
     function removeRange(index: number) {
@@ -122,15 +133,22 @@ export default function Popup() {
                 </div>
                 <div className="space-y-2">
                     {schedule.map((range, i) => (
-                        <div key={i}>
-                            <div className="flex items-center gap-2">
+                        <div key={i} className="relative">
+                            {savedIndex === i && (
+                                <span className="absolute -top-2 -left-1 text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 rounded px-1 py-0.5 leading-none">
+                                    saved
+                                </span>
+                            )}
+                            <div
+                                className={`flex items-center gap-2 rounded-lg transition-colors duration-500 ${savedIndex === i ? "bg-green-50" : ""}`}
+                            >
                                 <input
                                     type="time"
                                     value={range.start}
                                     onChange={(e) =>
                                         updateRange(i, "start", e.target.value)
                                     }
-                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
+                                    className={`flex-1 text-sm border rounded-lg px-2 py-1.5 outline-none transition-colors duration-500 ${savedIndex === i ? "border-green-300 focus:border-green-400" : "border-gray-200 focus:border-gray-400"}`}
                                 />
                                 <span className="text-gray-400 text-sm">
                                     to
@@ -141,7 +159,7 @@ export default function Popup() {
                                     onChange={(e) =>
                                         updateRange(i, "end", e.target.value)
                                     }
-                                    className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-gray-400"
+                                    className={`flex-1 text-sm border rounded-lg px-2 py-1.5 outline-none transition-colors duration-500 ${savedIndex === i ? "border-green-300 focus:border-green-400" : "border-gray-200 focus:border-gray-400"}`}
                                 />
                                 {schedule.length > 1 && (
                                     <button
